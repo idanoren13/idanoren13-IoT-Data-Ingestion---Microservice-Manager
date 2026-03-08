@@ -3,3 +3,7 @@ uvicorn>=0.34
 redis>=5.2
 pydantic>=2.11
 pydantic-settings>=2.8
+pytest>=8.0
+pytest-asyncio>=1.0
+httpx>=0.25
+fakeredis>=2.0

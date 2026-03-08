@@ -4,18 +4,19 @@ A real-time IoT data ingestion platform that receives sensor data from thousands
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                       FastAPI Application                    │
 │                                                              │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐  │
-│  │  Sensors API  │  │  Workers API  │  │   Scaling API    │  │
-│  │  (Part 1)     │  │  (Part 2)     │  │   (Part 3)       │  │
-│  │              │  │               │  │                  │  │
-│  │ POST /data   │  │ GET  /        │  │ GET /metrics/    │  │
-│  │ GET  /data   │  │ POST /        │  │     throughput   │  │
-│  │ GET  /range  │  │ DEL  /{id}    │  │ GET /scaling/    │  │
-│  │ GET  /       │  │ PUT  /health  │  │     recommendation│ │
+│  ┌──────────────┐  ┌────────────────┐  ┌──────────────────┐  │
+│  │  Sensors API  │  │ Workers &      │  │   Scaling API    │  │
+│  │  (Part 1)     │  │ Metrics (Pt 2) │  │   (Part 3)       │  │
+│  │              │  │                │  │                  │  │
+│  │ POST /data   │  │ GET  /workers  │  │ GET /scaling/    │  │
+│  │ GET  /data   │  │ POST /workers  │  │     recommendation│ │
+│  │ GET  /range  │  │ DEL  /{id}     │  │                  │  │
+│  │ GET  /       │  │ PUT  /{id}/..  │  │                  │  │
+│  │              │  │ GET /metrics/..│  │                  │  │
 │  └──────┬───────┘  └──────┬────────┘  └────────┬─────────┘  │
 │         │                 │                     │            │
 │         └─────────────────┼─────────────────────┘            │
@@ -38,7 +39,7 @@ A real-time IoT data ingestion platform that receives sensor data from thousands
 ### Key Design Decisions
 
 | Decision | Rationale |
-|----------|-----------|
+| --- | --- |
 | **Sorted Sets for sensor data** | Score = Unix timestamp enables O(log N) range queries via `ZRANGEBYSCORE`, natural ordering without secondary indexes. |
 | **Per-second throughput counters** | Each second gets its own Redis key (`throughput:{epoch}`). Sliding window averages the last N seconds. Keys auto-expire after 60s to prevent unbounded growth. |
 | **Redis Hashes for workers** | Each worker is a hash (`worker:{id}`) — atomic field-level updates for heartbeats without overwriting the entire object. |
@@ -46,18 +47,23 @@ A real-time IoT data ingestion platform that receives sensor data from thousands
 
 ### Project Structure
 
-```
+```text
 ├── app/
-│   ├── main.py              # FastAPI app with lifespan-managed Redis
+│   ├── main.py               # FastAPI app with lifespan-managed Redis
 │   ├── config.py             # Pydantic Settings (env-configurable)
 │   ├── redis_client.py       # Async Redis connection lifecycle
+│   ├── utils.py              # Shared utilities (e.g., calculate_throughput)
+│   ├── middleware/           # Request logging and exception handling
 │   ├── models/
-│   │   ├── sensor.py         # SensorReading, SensorReadingOut, SensorInfo
+│   │   ├── metrics.py        # ThroughputMetrics
+│   │   ├── scaling.py        # ScalingRecommendation
+│   │   ├── sensor.py         # SensorReading, SensorReadingOut, etc.
 │   │   └── worker.py         # WorkerRegister, WorkerHealthUpdate, Worker
 │   └── routers/
+│       ├── metrics.py        # Part 2: Throughput metrics
+│       ├── scaling.py        # Part 3: Scaling recommendation
 │       ├── sensors.py        # Part 1: Sensor data CRUD
-│       ├── workers.py        # Part 2: Worker management
-│       └── scaling.py        # Part 3: Metrics & scaling
+│       └── workers.py        # Part 2: Worker management
 ├── tests/
 │   ├── conftest.py           # fakeredis fixtures
 │   ├── test_sensors.py
@@ -101,32 +107,32 @@ No running Redis instance required — tests use **fakeredis**.
 ### Sensor Data (Part 1)
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
+| --- | --- | --- |
 | `/api/v1/sensors/data` | POST | Ingest a sensor reading |
 | `/api/v1/sensors/{sensor_id}/data` | GET | Get latest readings (query: `limit`) |
 | `/api/v1/sensors/{sensor_id}/data/range` | GET | Get readings in time range (query: `start`, `end`) |
 | `/api/v1/sensors` | GET | List all registered sensors |
 
-### Worker Management (Part 2)
+### Worker Management & Metrics (Part 2)
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
+| --- | --- | --- |
 | `/api/v1/workers` | GET | List all workers |
 | `/api/v1/workers` | POST | Register a new worker |
 | `/api/v1/workers/{worker_id}` | DELETE | Deregister a worker |
 | `/api/v1/workers/{worker_id}/health` | PUT | Worker heartbeat/health update |
+| `/api/v1/metrics/throughput` | GET | Current throughput metrics |
 
-### Scaling & Metrics (Part 3)
+### Scaling (Part 3)
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/metrics/throughput` | GET | Current throughput metrics |
+| --- | --- | --- |
 | `/api/v1/scaling/recommendation` | GET | Scaling recommendation based on load |
 
 ### Scaling Rules
 
 | Condition | Recommendation |
-|-----------|---------------|
+| --- | --- |
 | `throughput > workers × 1500` | **SCALE_UP** |
 | `throughput < workers × 1000` | **SCALE_DOWN** |
 | Otherwise | **NO_CHANGE** |

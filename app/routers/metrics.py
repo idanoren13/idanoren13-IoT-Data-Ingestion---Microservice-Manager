@@ -25,7 +25,6 @@ router = APIRouter(prefix="/api/v1/metrics", tags=["Metrics"])
 async def get_throughput(
     redis: Annotated[Redis, Depends(get_redis)],
 ):
-    """Get current ingestion throughput metrics."""
     rate, total = await calculate_throughput(redis)
     logger.debug("Throughput: %.2f msg/s (%d in window)", rate, total)
     return ThroughputMetrics(

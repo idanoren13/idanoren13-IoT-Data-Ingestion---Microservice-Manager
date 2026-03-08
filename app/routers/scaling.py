@@ -33,7 +33,6 @@ async def get_scaling_recommendation(
     rate, _ = await calculate_throughput(redis)
     active_workers = await redis.scard(WORKER_REGISTRY)
 
-    # Edge case: no workers registered yet
     if active_workers == 0:
         recommended = (
             max(settings.min_workers, math.ceil(rate / settings.worker_capacity))
