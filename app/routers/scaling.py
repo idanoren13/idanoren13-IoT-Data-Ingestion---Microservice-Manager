@@ -1,5 +1,6 @@
 """Part 3 – Throughput metrics & scaling recommendation endpoints."""
 
+import logging
 import math
 import time
 
@@ -11,6 +12,9 @@ from redis.asyncio import Redis
 
 from app.config import settings
 from app.redis_client import get_redis
+from app.routers.sensors import _calculate_throughput
+
+logger = logging.getLogger("iot_platform")
 
 router = APIRouter(prefix="/api/v1", tags=["Scaling"])
 
@@ -22,12 +26,6 @@ WORKER_REGISTRY = "workers:registry"
 # ──────────────────────────────────────────────
 
 
-class ThroughputMetrics(BaseModel):
-    current_throughput: float
-    window_seconds: int
-    messages_in_window: int
-
-
 class ScalingRecommendation(BaseModel):
     current_throughput: float
     active_workers: int
@@ -37,40 +35,8 @@ class ScalingRecommendation(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────
-
-
-async def _calculate_throughput(redis: Redis) -> tuple[float, int]:
-    """Return (messages_per_second, total_messages_in_window)."""
-    now = int(time.time())
-    window = settings.throughput_window_seconds
-
-    # Gather per-second bucket keys
-    keys = [f"throughput:{now - i}" for i in range(window)]
-    values = await redis.mget(*keys)
-
-    total = sum(int(v) for v in values if v is not None)
-    rate = total / window
-    return rate, total
-
-
-# ──────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────
-
-
-@router.get("/metrics/throughput", response_model=ThroughputMetrics)
-async def get_throughput(
-    redis: Annotated[Redis, Depends(get_redis)],
-):
-    """Get current ingestion throughput metrics."""
-    rate, total = await _calculate_throughput(redis)
-    return ThroughputMetrics(
-        current_throughput=round(rate, 2),
-        window_seconds=settings.throughput_window_seconds,
-        messages_in_window=total,
-    )
 
 
 @router.get("/scaling/recommendation", response_model=ScalingRecommendation)
@@ -83,11 +49,17 @@ async def get_scaling_recommendation(
 
     # Edge case: no workers registered yet
     if active_workers == 0:
+        recommended = (
+            max(settings.min_workers, math.ceil(rate / settings.worker_capacity))
+            if rate > 0
+            else settings.min_workers
+        )
+        logger.info("Scaling recommendation: SCALE_UP (no active workers), recommended=%d", recommended)
         return ScalingRecommendation(
             current_throughput=round(rate, 2),
             active_workers=0,
             recommended_action="SCALE_UP",
-            recommended_workers=max(settings.min_workers, math.ceil(rate / settings.worker_capacity)) if rate > 0 else settings.min_workers,
+            recommended_workers=recommended,
             reason="No active workers registered",
         )
 
@@ -97,6 +69,10 @@ async def get_scaling_recommendation(
     if rate > active_workers * capacity:
         needed = math.ceil(rate / capacity)
         recommended = min(needed, settings.max_workers)
+        logger.info(
+            "Scaling recommendation: SCALE_UP, rate=%.0f, workers=%d, recommended=%d",
+            rate, active_workers, recommended,
+        )
         return ScalingRecommendation(
             current_throughput=round(rate, 2),
             active_workers=active_workers,
@@ -108,6 +84,10 @@ async def get_scaling_recommendation(
     if rate < active_workers * scale_down:
         needed = max(math.ceil(rate / capacity), settings.min_workers)
         recommended = max(needed, settings.min_workers)
+        logger.info(
+            "Scaling recommendation: SCALE_DOWN, rate=%.0f, workers=%d, recommended=%d",
+            rate, active_workers, recommended,
+        )
         return ScalingRecommendation(
             current_throughput=round(rate, 2),
             active_workers=active_workers,
@@ -116,6 +96,7 @@ async def get_scaling_recommendation(
             reason=f"Throughput ({rate:.0f} msg/s) below {scale_down} msg/s per worker threshold",
         )
 
+    logger.debug("Scaling recommendation: NO_CHANGE, rate=%.0f, workers=%d", rate, active_workers)
     return ScalingRecommendation(
         current_throughput=round(rate, 2),
         active_workers=active_workers,

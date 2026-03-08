@@ -1,21 +1,43 @@
-"""Pydantic schemas for sensor data."""
+"""Pydantic schemas for sensor data – with strict validation."""
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SensorReading(BaseModel):
     """Payload sent by IoT devices."""
 
-    sensor_id: str = Field(..., examples=["sensor-001"])
-    timestamp: datetime = Field(..., examples=["2024-01-15T10:30:00Z"])
+    sensor_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+        examples=["sensor-001"],
+        description="Unique sensor identifier (alphanumeric, hyphens, underscores only)",
+    )
+    timestamp: datetime = Field(
+        ...,
+        examples=["2026-03-13T10:30:00Z"],
+        description="Reading timestamp in ISO-8601 format",
+    )
     readings: dict[str, float] = Field(
-        ..., examples=[{"temperature": 23.5, "humidity": 65.2}]
+        ...,
+        examples=[{"temperature": 23.5, "humidity": 65.2}],
+        description="Key-value pairs of sensor measurements",
     )
     metadata: dict[str, str] = Field(
-        ..., examples=[{"location": "warehouse-A", "device_type": "DHT22"}]
+        default_factory=dict,
+        examples=[{"location": "warehouse-A", "device_type": "DHT22"}],
+        description="Optional key-value metadata about the reading",
     )
+
+    @field_validator("readings")
+    @classmethod
+    def readings_must_not_be_empty(cls, v: dict[str, float]) -> dict[str, float]:
+        if not v:
+            raise ValueError("readings must contain at least one measurement")
+        return v
 
 
 class SensorReadingOut(BaseModel):
