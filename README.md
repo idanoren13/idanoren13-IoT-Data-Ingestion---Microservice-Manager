@@ -42,7 +42,7 @@ A real-time IoT data ingestion platform that receives sensor data from thousands
 | --- | --- |
 | **Sorted Sets for sensor data** | Score = Unix timestamp enables O(log N) range queries via `ZRANGEBYSCORE`, natural ordering without secondary indexes. |
 | **Per-second throughput counters** | Each second gets its own Redis key (`throughput:{epoch}`). Sliding window averages the last N seconds. Keys auto-expire after 60s to prevent unbounded growth. |
-| **Redis Hashes for workers** | Each worker is a hash (`worker:{id}`) — atomic field-level updates for heartbeats without overwriting the entire object. |
+| **Redis Hashes for workers** | Each worker is a hash (`worker:{id}`) - atomic field-level updates for heartbeats without overwriting the entire object. |
 | **Pydantic Settings** | All thresholds (capacity, min/max workers) are configurable via environment variables with `IOT_` prefix. |
 
 ### Project Structure
@@ -100,7 +100,7 @@ pip install pytest pytest-asyncio httpx fakeredis
 pytest tests/ -v
 ```
 
-No running Redis instance required — tests use **fakeredis**.
+No running Redis instance required - tests use **fakeredis**.
 
 ## API Reference
 
@@ -144,22 +144,18 @@ All thresholds configurable via environment variables with `IOT_` prefix (e.g., 
 
 Given more time, the following enhancements would be prioritized:
 
-1. **Data Retention & Eviction** — Add TTL or max-count policies to sensor sorted sets to prevent unbounded memory growth. Implement `ZREMRANGEBYSCORE` for time-based cleanup.
+1. **Data Retention & Eviction** - Add TTL or max-count policies to sensor sorted sets to prevent unbounded memory growth. Implement `ZREMRANGEBYSCORE` for time-based cleanup.
 
-2. **Batch Ingestion** — Add a `POST /api/v1/sensors/data/batch` endpoint accepting arrays of readings for higher throughput and fewer round-trips.
+2. **Batch Ingestion** - Add a `POST /api/v1/sensors/data/batch` endpoint accepting arrays of readings for higher throughput and fewer round-trips.
 
-3. **WebSocket Streaming** — Real-time push of sensor data and scaling events to dashboards via WebSocket connections.
+3. **deploy api with k8s** - use k8s to deploy the api with horizontal pod auto-scaling based on load.
 
-4. **Actual Worker Orchestration** — Integrate with Docker/Kubernetes API to *execute* scaling decisions automatically (spin up/down containers) instead of only recommending.
+4. **Actual Worker Orchestration** - Integrate with Kubernetes API to *execute* scaling decisions automatically (spin up/down containers) instead of only recommending.
 
-5. **Authentication & Rate Limiting** — JWT/API-key auth for sensors and admin endpoints, per-sensor rate limiting to prevent abuse.
+5. **Authentication & Rate Limiting** - JWT/API-key auth for sensors and admin endpoints, per-sensor rate limiting to prevent abuse.
 
-6. **Persistent Storage** — Write-behind to TimescaleDB or InfluxDB for long-term analytics while keeping Redis as the hot cache.
+6. **Persistent Storage** - Write-behind to TimescaleDB or InfluxDB for long-term analytics while keeping Redis as the hot cache.
 
-7. **Prometheus Metrics** — Export throughput, latency percentiles, and worker health as Prometheus metrics for Grafana dashboards.
+7. **Prometheus Metrics** - Export throughput, latency percentiles, and worker health as Prometheus metrics for Grafana dashboards.
 
-8. **Worker Health Expiry** — Auto-mark workers as `inactive` if no heartbeat received within a configurable timeout (using Redis key expiry + keyspace notifications).
-
-9. **CI/CD Pipeline** — GitHub Actions workflow with lint, test, build, and push to container registry.
-
-10. **Load Testing** — Locust or k6 scripts to benchmark ingestion throughput and validate scaling thresholds under realistic load.
+8. **CI/CD Pipeline** - GitHub Actions workflow with lint, test, build, and push to container registry.
