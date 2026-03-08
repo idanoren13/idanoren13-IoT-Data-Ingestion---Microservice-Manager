@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Throughput sliding window
     throughput_window_seconds: int = 10  # seconds of history to average over
 
-    model_config = {"env_prefix": "IOT_"}
+    model_config = {"env_prefix": "IOT_", "env_file": ".env"}
 
 
 settings = Settings()
