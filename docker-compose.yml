@@ -1,20 +1,88 @@
+# ──────────────────────────────────────────────────────────────────────
+# IoT Data Ingestion & Microservice Manager – Docker Compose
+# ──────────────────────────────────────────────────────────────────────
+
 services:
+
+  # ── Application ────────────────────────────────────────────────────
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-ingestion-api
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     environment:
       - IOT_REDIS_URL=redis://redis:6379/0
+      - IOT_WORKER_CAPACITY=${IOT_WORKER_CAPACITY:-1500}
+      - IOT_MIN_WORKERS=${IOT_MIN_WORKERS:-1}
+      - IOT_MAX_WORKERS=${IOT_MAX_WORKERS:-10}
+      - IOT_THROUGHPUT_WINDOW_SECONDS=${IOT_THROUGHPUT_WINDOW_SECONDS:-10}
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - iot-network
 
+  # ── Redis (data store) ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
+    container_name: iot-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes --save 60 1000
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    networks:
+      - iot-network
+
+# ── Volumes ────────────────────────────────────────────────────────────
+volumes:
+  redis-data:
+    driver: local
+
+# ── Networks ───────────────────────────────────────────────────────────
+networks:
+  iot-network:
+    driver: bridge

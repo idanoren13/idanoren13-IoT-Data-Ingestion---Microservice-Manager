@@ -1,0 +1,37 @@
+# ── Version control ───────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Python artifacts ─────────────────────────────────────────────────
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.venv
+venv
+
+# ── IDE & editor ─────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── Testing & CI ─────────────────────────────────────────────────────
+.pytest_cache
+tests/
+scripts/
+htmlcov/
+.coverage
+
+# ── Docker (no recursive builds) ─────────────────────────────────────
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ── Documentation & misc ─────────────────────────────────────────────
+README.md
+instructions.md
+*.pdf
+*.md
+!app/**/*.md
+.env
