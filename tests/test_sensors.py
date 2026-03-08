@@ -31,8 +31,15 @@ async def test_get_latest_readings(client):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 2
+    # Should return only readings + timestamp, not full sensor objects
+    for entry in data:
+        assert "readings" in entry
+        assert "timestamp" in entry
+        assert "sensor_id" not in entry
+        assert "metadata" not in entry
     # Latest first
     assert data[0]["timestamp"] == "2024-01-15T11:00:00+00:00"
+    assert data[0]["readings"] == {"temperature": 23.5, "humidity": 65.2}
 
 
 @pytest.mark.asyncio

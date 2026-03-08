@@ -43,10 +43,3 @@ class Worker(BaseModel):
     registered_at: datetime
     last_heartbeat: datetime
     processed_count: int = 0
-
-
-class WorkerGetResponse(BaseModel):
-    """Worker Status representation."""
-
-    worker_id: str
-    status: str = "active"

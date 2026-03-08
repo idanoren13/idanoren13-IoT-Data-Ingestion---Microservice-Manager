@@ -10,7 +10,7 @@ from app.middleware.exception_handler import register_exception_handlers
 from app.middleware.logging_config import setup_logging
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.redis_client import close_redis, init_redis
-from app.routers import scaling, sensors, workers
+from app.routers import metrics, scaling, sensors, workers
 
 logger = logging.getLogger("iot_platform")
 
@@ -47,6 +47,7 @@ register_exception_handlers(app)
 # ── Routers ──────────────────────────────────────────────────────────
 app.include_router(sensors.router)
 app.include_router(workers.router)
+app.include_router(metrics.router)
 app.include_router(scaling.router)
 
 

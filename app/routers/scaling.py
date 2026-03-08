@@ -1,37 +1,23 @@
-"""Part 3 – Throughput metrics & scaling recommendation endpoints."""
+"""Part 3 – Scaling recommendation endpoint."""
 
 import logging
 import math
-import time
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from redis.asyncio import Redis
 
 from app.config import settings
+from app.models.scaling import ScalingRecommendation
 from app.redis_client import get_redis
-from app.routers.sensors import _calculate_throughput
+from app.utils import calculate_throughput
 
 logger = logging.getLogger("iot_platform")
 
 router = APIRouter(prefix="/api/v1", tags=["Scaling"])
 
 WORKER_REGISTRY = "workers:registry"
-
-
-# ──────────────────────────────────────────────
-# Response models
-# ──────────────────────────────────────────────
-
-
-class ScalingRecommendation(BaseModel):
-    current_throughput: float
-    active_workers: int
-    recommended_action: str
-    recommended_workers: int
-    reason: str
 
 
 # ──────────────────────────────────────────────
@@ -44,7 +30,7 @@ async def get_scaling_recommendation(
     redis: Annotated[Redis, Depends(get_redis)],
 ):
     """Return a scaling recommendation based on current throughput and active workers."""
-    rate, _ = await _calculate_throughput(redis)
+    rate, _ = await calculate_throughput(redis)
     active_workers = await redis.scard(WORKER_REGISTRY)
 
     # Edge case: no workers registered yet

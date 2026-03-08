@@ -8,11 +8,9 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel
 from redis.asyncio import Redis
 
-from app.config import settings
-from app.models.sensor import SensorInfo, SensorReading, SensorReadingOut
+from app.models.sensor import SensorInfo, SensorReading, SensorReadingOut, SensorReadingsOnly
 from app.redis_client import get_redis
 
 logger = logging.getLogger("iot_platform")
@@ -32,30 +30,6 @@ def _data_key(sensor_id: str) -> str:
 def _throughput_key() -> str:
     """Per-second bucket key for throughput tracking."""
     return f"throughput:{int(time.time())}"
-
-
-async def _calculate_throughput(redis: Redis) -> tuple[float, int]:
-    """Return (messages_per_second, total_messages_in_window)."""
-    now = int(time.time())
-    window = settings.throughput_window_seconds
-
-    keys = [f"throughput:{now - i}" for i in range(window)]
-    values = await redis.mget(*keys)
-
-    total = sum(int(v) for v in values if v is not None)
-    rate = total / window
-    return rate, total
-
-
-# ──────────────────────────────────────────────
-# Models
-# ──────────────────────────────────────────────
-
-
-class ThroughputMetrics(BaseModel):
-    current_throughput: float
-    window_seconds: int
-    messages_in_window: int
 
 
 # ──────────────────────────────────────────────
@@ -93,17 +67,21 @@ async def ingest_sensor_data(
     return {"status": "ok", "sensor_id": reading.sensor_id}
 
 
-@router.get("/{sensor_id}/data", response_model=list[SensorReadingOut])
+@router.get("/{sensor_id}/data", response_model=list[SensorReadingsOnly])
 async def get_latest_readings(
     sensor_id: Annotated[str, Path(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_\-]+$")],
     redis: Annotated[Redis, Depends(get_redis)],
     limit: Annotated[int, Query(ge=1, le=1000, description="Number of latest readings")] = 10,
 ):
-    """Retrieve the latest N readings for a given sensor."""
+    """Retrieve the latest readings for a sensor (only readings values, sorted by time, latest first)."""
     raw = await redis.zrevrange(_data_key(sensor_id), 0, limit - 1)
     if not raw:
         raise HTTPException(404, detail=f"No data found for sensor '{sensor_id}'")
-    return [json.loads(item) for item in raw]
+    results = []
+    for item in raw:
+        parsed = json.loads(item)
+        results.append(SensorReadingsOnly(readings=parsed["readings"], timestamp=parsed["timestamp"]))
+    return results
 
 
 @router.get("/{sensor_id}/data/range", response_model=list[SensorReadingOut])
@@ -144,15 +122,3 @@ async def list_sensors(
     return sensors
 
 
-@router.get("/metrics/throughput", response_model=ThroughputMetrics)
-async def get_throughput(
-    redis: Annotated[Redis, Depends(get_redis)],
-):
-    """Get current ingestion throughput metrics."""
-    rate, total = await _calculate_throughput(redis)
-    logger.debug("Throughput: %.2f msg/s (%d in window)", rate, total)
-    return ThroughputMetrics(
-        current_throughput=round(rate, 2),
-        window_seconds=settings.throughput_window_seconds,
-        messages_in_window=total,
-    )

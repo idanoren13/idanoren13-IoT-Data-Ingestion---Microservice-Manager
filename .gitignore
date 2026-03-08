@@ -14,3 +14,5 @@ env/
 .mypy_cache/
 
 .vscode/
+*.pdf
+instructions.md

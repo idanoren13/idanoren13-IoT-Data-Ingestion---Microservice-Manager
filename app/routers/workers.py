@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path
 from redis.asyncio import Redis
 
-from app.models.worker import Worker, WorkerHealthUpdate, WorkerRegister, WorkerGetResponse
+from app.models.worker import Worker, WorkerHealthUpdate, WorkerRegister
 from app.redis_client import get_redis
 
 logger = logging.getLogger("iot_platform")
@@ -30,7 +30,7 @@ def _worker_key(worker_id: str) -> str:
 # ──────────────────────────────────────────────
 
 
-@router.get("", response_model=list[WorkerGetResponse])
+@router.get("", response_model=list[Worker])
 async def list_workers(
     redis: Annotated[Redis, Depends(get_redis)],
 ):

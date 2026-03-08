@@ -54,3 +54,10 @@ class SensorInfo(BaseModel):
 
     sensor_id: str
     reading_count: int
+
+
+class SensorReadingsOnly(BaseModel):
+    """Only the readings dict, returned for GET /{sensor_id}/data."""
+
+    readings: dict[str, float]
+    timestamp: datetime
